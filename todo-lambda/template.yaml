@@ -1,0 +1,89 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: "Todo API: API Gateway HTTP -> Lambda (Node.js) -> DynamoDB"
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Architectures: [arm64]
+    MemorySize: 128
+    Timeout: 5
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref TodoTable
+
+Resources:
+  Api:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins: ['*']
+        AllowHeaders: ['content-type']
+        AllowMethods: ['GET','POST','DELETE']
+
+  TodoTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: todo-items
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      BillingMode: PROVISIONED
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      TableClass: STANDARD
+
+  TodoFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: index.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TodoTable
+      Events:
+        GetAll:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /todos
+            Method: GET
+        GetOne:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /todos/{id}
+            Method: GET
+        Create:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /todos
+            Method: POST
+        Delete:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /todos/{id}
+            Method: DELETE
+
+  TodoFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${TodoFunction}
+      RetentionInDays: 7
+
+Outputs:
+  ApiUrl:
+    Description: "Base URL de l'HTTP API"
+    Value: !Sub
+      - "https://${ApiId}.execute-api.${AWS::Region}.amazonaws.com"
+      - { ApiId: !Ref Api }
+  TableName:
+    Value: !Ref TodoTable
+  FunctionName:
+    Value: !Ref TodoFunction
