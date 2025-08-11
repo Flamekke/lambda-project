@@ -19,6 +19,8 @@ resolve_s3 = true
 s3_prefix = "todo-lambda"
 region = "eu-west-3"
 image_repositories = []
+disable_rollback = true
+parameter_overrides = "BucketName=\"lambda-s3-demo-valentin\""
 
 [default.package.parameters]
 resolve_s3 = true

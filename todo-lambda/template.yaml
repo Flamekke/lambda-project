@@ -1,6 +1,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: "Todo API: API Gateway HTTP -> Lambda (Node.js) -> DynamoDB"
+Description: "Todo API + S3 Signed URLs: API Gateway HTTP -> Lambda (Node.js) -> DynamoDB & S3"
+
+Parameters:
+  BucketName:
+    Type: String
+    Default: lambda-s3-demo-valentin
+    Description: "Nom du bucket S3 existant à utiliser pour les URLs signées"
 
 Globals:
   Function:
@@ -21,6 +27,9 @@ Resources:
         AllowHeaders: ['content-type']
         AllowMethods: ['GET','POST','DELETE']
 
+  # ------------------------------
+  # DynamoDB (Todo)
+  # ------------------------------
   TodoTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -77,6 +86,45 @@ Resources:
       LogGroupName: !Sub /aws/lambda/${TodoFunction}
       RetentionInDays: 7
 
+  # ------------------------------
+  # Lambda S3 Signed URLs
+  # ------------------------------
+  SignedUrlFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3src/
+      Handler: index.handler
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref BucketName
+          URL_EXPIRATION_SECONDS: 60
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:GetObject
+              Resource: !Sub arn:aws:s3:::${BucketName}/*
+      Events:
+        GetUploadUrl:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /upload-url
+            Method: GET
+        GetDownloadUrl:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Path: /download-url
+            Method: GET
+
+  SignedUrlFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${SignedUrlFunction}
+      RetentionInDays: 7
+
 Outputs:
   ApiUrl:
     Description: "Base URL de l'HTTP API"
@@ -87,3 +135,7 @@ Outputs:
     Value: !Ref TodoTable
   FunctionName:
     Value: !Ref TodoFunction
+  SignedUrlFunctionName:
+    Value: !Ref SignedUrlFunction
+  BucketUsedForSignedUrls:
+    Value: !Ref BucketName
